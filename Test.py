@@ -243,11 +243,6 @@ def encryption(message):  # 16 Byte message
     return t_matrix(message)
 
 
-print(time.time() - start_time)
-Cipher = encryption("WillGraduateSoon")
-print(Cipher)
-print(time.time() - start_time)
-
 # Decryption
 def decryption(cypher):  # 16 Byte cypher
     text = cypher # [[], [], [], []]
@@ -297,5 +292,16 @@ def decryption(cypher):  # 16 Byte cypher
     return t_matrix(message)
 
 
+key_gen_time = time.time() - start_time
+print("Time for Key Gen: ", key_gen_time)
+
+Cipher = encryption("WillGraduateSoon")
+print(Cipher)
+
+enc_time = time.time() - start_time - key_gen_time
+print("Time for encryption: ", enc_time)
+
 print(decryption(Cipher))
-print(time.time() - start_time)
+
+dec_time = time.time() - start_time - key_gen_time - enc_time
+print("Time for decryption: ", dec_time)

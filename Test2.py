@@ -41,6 +41,36 @@ def shift_row(text):
     return text
 
 
-print(temp)
-print(inv_shift_row(temp))
-print(shift_row(temp))
+#print(temp)
+#print(inv_shift_row(temp))
+#print(shift_row(temp))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
