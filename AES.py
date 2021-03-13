@@ -1,7 +1,10 @@
 from BitVector import *
 import copy
+import time
+import binascii
 
-rc_i = ["00", "01", "02", "04", "08", "10", "20", "40", "80", "1B", "36"]
+
+
 Sbox = (
     0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
     0xCA, 0x82, 0xC9, 0x7D, 0xFA, 0x59, 0x47, 0xF0, 0xAD, 0xD4, 0xA2, 0xAF, 0x9C, 0xA4, 0x72, 0xC0,
@@ -38,6 +41,7 @@ InvSbox = (
     0xA0, 0xE0, 0x3B, 0x4D, 0xAE, 0x2A, 0xF5, 0xB0, 0xC8, 0xEB, 0xBB, 0x3C, 0x83, 0x53, 0x99, 0x61,
     0x17, 0x2B, 0x04, 0x7E, 0xBA, 0x77, 0xD6, 0x26, 0xE1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0C, 0x7D,
 )
+rc_i = ["00", "01", "02", "04", "08", "10", "20", "40", "80", "1B", "36"]
 Mixer = [
     [BitVector(hexstring="02"), BitVector(hexstring="03"), BitVector(hexstring="01"), BitVector(hexstring="01")],
     [BitVector(hexstring="01"), BitVector(hexstring="02"), BitVector(hexstring="03"), BitVector(hexstring="01")],
@@ -52,13 +56,18 @@ InvMixer = [
 ]
 
 
-key = "Thats my Kung Fu"
+#key = bytearray.fromhex("44656372797074205461736b20536978").decode("utf-8") # "Thats my Kung Fu"
+key = input("Enter Key:")
+if len(key) < 16:
+    key = key + "0"*(16-len(key))
 
+start_time = time.time()
+key = key.encode("utf-8").hex()
 k_final = []
 k_words = [[], [], [], []]
 for a in range(16):
     t = int((a)/4)
-    k_words[t].append(hex(ord(key[a]))[2:])
+    k_words[t].append(key[a*2:a*2+2])
 
 
 def print_matrix(m):
@@ -72,6 +81,14 @@ def sub_byte(a):                        # a --> hex number
     b = BitVector(hexstring=a)
     int_val = b.intValue()             # Binary -> Decimal
     s = Sbox[int_val]                  # Look up from table
+    s = BitVector(intVal=s, size=8)    # Decimal -> Binary(BCD)
+    return s.get_bitvector_in_hex()
+
+
+def inv_sub_byte(a):
+    b = BitVector(hexstring=a)
+    int_val = b.intValue()             # Binary -> Decimal
+    s = InvSbox[int_val]                  # Look up from table
     s = BitVector(intVal=s, size=8)    # Decimal -> Binary(BCD)
     return s.get_bitvector_in_hex()
 
@@ -116,10 +133,7 @@ for a in range(10):
     temp_key = generate_key(k_words[0:], a+1)
     k_final.append(copy.deepcopy(temp_key))
 
-#for a in range(11):
-#    print(k_final[a])
-# k_final[round_no][word_no]
-#print(k_final[0])
+key_gen_time = time.time() - start_time
 
 
 def t_matrix(m):              # Transpose Matrix
@@ -141,10 +155,17 @@ def add_round_key(text, k):         # input --> text , key (both 4*4 matrices)
 
 def shift_row(text):
     temp = copy.deepcopy(text)
-
     for row in range(1, 4, 1):
         for i in range(4):
             text[row][i] = temp[row][(i + row) % 4]
+    return text
+
+
+def inv_shift_row(text):
+    temp = copy.deepcopy(text)
+    for row in range(1, 4, 1):
+        for i in range(4):
+            text[row][i] = temp[row][(i - row) % 4]
     return text
 
 
@@ -163,13 +184,33 @@ def mix_column(text):
     return temp_text
 
 
+def inv_mix_column(text):
+    const = [["0e", "0b", "0d", "09"], ["09", "0e", "0b", "0d"], ["0d", "09", "0e", "0b"], ["0b", "0d", "09", "0e"]]
+    temp_text = [["00", "00", "00", "00"], ["00", "00", "00", "00"], ["00", "00", "00", "00"], ["00", "00", "00", "00"]]
+    for row in range(4):
+        for col in range(4):
+            for i in range(4):
+                AES_modulus = BitVector(bitstring='100011011')
+                bv1 = BitVector(hexstring=const[row][i])
+                bv2 = BitVector(hexstring=text[i][col])
+                bv3 = bv1.gf_multiply_modular(bv2, AES_modulus, 8)
+
+                temp_text[row][col] = (BitVector(hexstring=temp_text[row][col])^bv3).get_bitvector_in_hex()
+    return temp_text
+
+
 # Encryption
 def encryption(message):  # 16 Byte message
+    # global start_time
+    # start_time = time.time()
+
     text = [[], [], [], []]
     for a in range(16):
         t = int((a) / 4)
-        text[t].append(hex(ord(message[a]))[2:])
+        text[t].append(message[a*2 : a*2+2])
 
+    #print("Plain Text:")
+    #print(text)
     key0 = copy.deepcopy(k_final[0])
 
     key0 = t_matrix(key0)
@@ -207,11 +248,183 @@ def encryption(message):  # 16 Byte message
     key_n = copy.deepcopy(k_final[10])
     key_n = t_matrix(key_n)
     message = add_round_key(message, key_n)
-    return t_matrix(message)
+    message = t_matrix(message)
+
+    msg = ""
+    for i in range(4):
+        for j in range(4):
+            msg += message[i][j]
+    return msg
 
 
-Cipher = encryption("Two One Nine Two")
-print(Cipher)
+# Decryption
+def decryption(cipher):  # 16 Byte cypher
+    # global start_time
+    # start_time = time.time()
+
+    text = [[], [], [], []]
+    for a in range(16):
+        t = int((a) / 4)
+        text[t].append(cipher[a * 2: a * 2 + 2])
+
+    #print("Cypher:")
+    #print(cypher)
+    key10 = copy.deepcopy(k_final[10])
+
+    key10 = t_matrix(key10)
+    message = t_matrix(text)
+    message = add_round_key(message, key10)
+
+    # Round 1 to 9
+    for r in range(1, 10, 1):
+        # Inv Shift Row
+        inv_shift_row(message)
+
+        # Inv Substitute Bytes
+        for i in range(4):
+            for j in range(4):
+                message[i][j] = inv_sub_byte(message[i][j])
+
+        # Add Round Key
+        key_n = copy.deepcopy(k_final[10-r])
+        key_n = t_matrix(key_n)
+        message = add_round_key(message, key_n)
+
+        # Inv Mix Column
+        message = inv_mix_column(message)
+
+    # 10th round
+    # Shift Row
+    inv_shift_row(message)
+
+    # Substitute Bytes
+    for i in range(4):
+        for j in range(4):
+            message[i][j] = inv_sub_byte(message[i][j])
+
+    # Add Round Key
+    key_n = copy.deepcopy(k_final[0])
+    key_n = t_matrix(key_n)
+    message = add_round_key(message, key_n)
+    message = t_matrix(message)
+
+    msg = ""
+    for i in range(4):
+        for j in range(4):
+            msg += message[i][j]
+    return msg
 
 
-# Decription
+msg = input("Enter Message to Encrypt :")
+start_time = time.time()
+while 1:
+    if len(msg) == 0:
+        break
+    elif len(msg) <= 16:
+        msg += " "*(16-len(msg))
+        msg = msg.encode("utf-8").hex()
+        Cipher = encryption(msg)
+        print("Cipher: ", Cipher)
+        break
+    else:
+        temp_msg = msg[0:16]
+        temp_msg = temp_msg.encode("utf-8").hex()
+        Cipher = encryption(temp_msg)
+        print("Cipher: ", Cipher)
+        msg = msg[16:]
+enc_time = time.time() - start_time
+
+c = int(input("Want to encrypt a file?(0/1): "))
+if c == 1:
+    filename = input("Enter a filename to encrypt: ")
+    with open(filename, 'rb') as f:
+        content = f.read()
+    msg = binascii.hexlify(content).hex()
+
+    cipher_file = open("out1.txt", "w")
+    cipher_file.close()
+    start_time = time.time()
+    while 1:
+        if len(msg) == 0:
+            break
+        elif len(msg) <= 16:
+            msg += " "*(16-len(msg))
+            msg = msg.encode("utf-8").hex()
+            print(msg)
+            Cipher = encryption(msg)
+
+            cipher_file = open("out1.txt", "a")
+            cipher_file.write(Cipher)
+            cipher_file.close()
+            # print("Cipher: ", Cipher)
+            break
+        else:
+            temp_msg = msg[0:16]
+            temp_msg = temp_msg.encode("utf-8").hex()
+            print(temp_msg)
+            Cipher = encryption(temp_msg)
+
+            cipher_file = open("out1.txt", "a")
+            cipher_file.write(Cipher)
+            cipher_file.close()
+            # print("Cipher: ", Cipher)
+            msg = msg[16:]
+    enc_time = time.time() - start_time
+
+
+Cipher = input("Enter Ciphertext in hex(n * 16 byte) :")
+start_time = time.time()
+while 1:
+    if len(Cipher) == 0:
+        break
+    elif len(Cipher) == 32:
+        msg = decryption(Cipher)
+        print("Msg in hex: ", msg)
+        print("In ASCII: ", bytearray.fromhex(msg).decode("utf-8"))
+        break
+    else:
+        temp_cipher = Cipher[0:32]
+        msg = decryption(temp_cipher)
+        print("Msg in hex: ", msg)
+        print("In ASCII: ", bytearray.fromhex(msg).decode("utf-8"))
+        Cipher = Cipher[32:]
+dec_time = time.time() - start_time
+
+
+c = int(input("Want to decrypt a file?(0/1): "))
+if c == 1:
+    file = input("Enter filename(.txt) to decrypt :")
+    start_time = time.time()
+    plain_text = open("out2.txt", "w")
+    plain_text.close()
+
+    Cipher = open(file, "r").read()
+    while 1:
+        if len(Cipher) == 0:
+            break
+        elif len(Cipher) == 32:
+            msg = decryption(Cipher)
+            #print(msg)
+
+            msg = binascii.unhexlify(msg).hex()
+            msg = bytes.fromhex(msg)
+            plain_text = open("out2.txt", "ab")
+            plain_text.write(msg)
+            plain_text.close()
+            break
+        else:
+            temp_cipher = Cipher[0:32]
+            msg = decryption(temp_cipher)
+            #print(msg)
+
+            msg = binascii.unhexlify(msg).hex()
+            msg = bytes.fromhex(msg)
+            plain_text = open("out2.txt", "ab")
+            plain_text.write(msg)
+            plain_text.close()
+            Cipher = Cipher[32:]
+    dec_time = time.time() - start_time
+
+print("\n\nTime for Key Gen: ", key_gen_time)
+print("Time for encryption: ", enc_time)
+print("Time for decryption: ", dec_time)
