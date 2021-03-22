@@ -350,7 +350,7 @@ if c == 1:
         elif len(msg) <= 16:
             msg += " "*(16-len(msg))
             msg = msg.encode("utf-8").hex()
-            print(msg)
+            # print(msg)
             Cipher = encryption(msg)
 
             cipher_file = open("out1.txt", "a")
@@ -361,7 +361,7 @@ if c == 1:
         else:
             temp_msg = msg[0:16]
             temp_msg = temp_msg.encode("utf-8").hex()
-            print(temp_msg)
+            # print(temp_msg)
             Cipher = encryption(temp_msg)
 
             cipher_file = open("out1.txt", "a")
